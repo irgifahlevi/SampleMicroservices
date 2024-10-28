@@ -20,9 +20,12 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
+
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore src/sample-microservices.sln
+
     - name: Build
-      run: dotnet build --no-restore
+      run: dotnet build src/sample-microservices.sln --no-restore
+
     - name: Test
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet test src/sample-microservices.sln --no-build --verbosity normal
