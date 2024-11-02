@@ -18,10 +18,10 @@ namespace Product.API.ProductServices
         {
             if (products == null)
             {
-                throw new ArgumentNullException(nameof(Products));
+                throw new ArgumentNullException(nameof(ProductRequest));
             }
 
-            var p = new Products()
+            var newProduct = new Products()
             {
                 Id = Guid.NewGuid(),
                 Name = products.Name,
@@ -30,19 +30,30 @@ namespace Product.API.ProductServices
                 Description = products.Description,
             };
 
-            _products.Add(p);
+            _products.Add(newProduct);
 
-            var result = await _producer.ProduceAsync("add-product", new Message<Null, string> { Value = JsonSerializer.Serialize(p) });
+            var lastData = _products.Last();
 
-            if (result.Status != PersistenceStatus.Persisted)
+            try
             {
-                var lastData = _products.Last();
-                if (lastData != null)
-                    _products.Remove(lastData);
-                throw new InvalidOperationException("Failed to persist product data in Kafka.");
-            }
+                var result = await _producer.ProduceAsync("add-product", new Message<Null, string> { Value = JsonSerializer.Serialize(newProduct) });
 
-            return p.Id;
+                if (result.Status != PersistenceStatus.Persisted)
+                {
+
+                    if (lastData != null)
+                        _products.Remove(lastData);
+                    throw new InvalidOperationException("Failed to persist product data in Kafka.");
+                }
+
+                return newProduct.Id;
+            }
+            catch (Exception ex)
+            {
+                _products.Remove(lastData!);
+                throw;
+                
+            }
         }
 
         public async Task<bool> DeleteProduct(Guid id)
@@ -50,19 +61,26 @@ namespace Product.API.ProductServices
             var product = _products.FirstOrDefault(x => x.Id == id);
             if (product != null)
             {
+                var data = product;
+
                 _products.Remove(product);
 
-                var result = await _producer.ProduceAsync("delete-product", new Message<Null, string> { Value = product.Id.ToString() });
-
-                if (result.Status != PersistenceStatus.Persisted)
+                try
                 {
-                    var lastData = _products.Last();
-                    if (lastData != null)
-                        _products.Remove(lastData);
-                    throw new InvalidOperationException("Failed to persist product data in Kafka.");
-                }
+                    var result = await _producer.ProduceAsync("delete-product", new Message<Null, string> { Value = product.Id.ToString() });
 
-                return await Task.FromResult(true);
+                    if (result.Status != PersistenceStatus.Persisted)
+                    {
+                        throw new InvalidOperationException("Failed to persist product data in Kafka.");
+                    }
+
+                    return await Task.FromResult(true);
+                }
+                catch (Exception ex) 
+                { 
+                    _products.Add(data);
+                    throw;
+                }                
             }
 
             return await Task.FromResult(false);
